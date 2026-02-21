@@ -1,7 +1,25 @@
 /**
  * Run once to set up the database schema.
- * Usage: npx tsx scripts/migrate.ts
+ * Usage: npm run migrate
  */
+import { readFileSync } from "fs";
+
+// Load .env or .env.local for local runs
+if (!process.env.DATABASE_URL) {
+  for (const envFile of [".env.local", ".env"]) {
+    try {
+      const env = readFileSync(envFile, "utf-8");
+      for (const line of env.split("\n")) {
+        const [k, ...v] = line.split("=");
+        if (k && !k.startsWith("#")) process.env[k.trim()] = v.join("=").trim();
+      }
+      break;
+    } catch {
+      // file not found — try next
+    }
+  }
+}
+
 import sql from "../lib/db";
 
 async function migrate() {

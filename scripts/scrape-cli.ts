@@ -12,16 +12,19 @@ import { ScrapeJob, ScraperCategory } from "../types";
 import { saveJob } from "../lib/storage";
 import { runScrapeJob } from "../lib/scrapers";
 
-// Load .env.local for local runs
+// Load .env or .env.local for local runs
 if (!process.env.DATABASE_URL) {
-  try {
-    const env = readFileSync(".env.local", "utf-8");
-    for (const line of env.split("\n")) {
-      const [k, ...v] = line.split("=");
-      if (k && !k.startsWith("#")) process.env[k.trim()] = v.join("=").trim();
+  for (const envFile of [".env.local", ".env"]) {
+    try {
+      const env = readFileSync(envFile, "utf-8");
+      for (const line of env.split("\n")) {
+        const [k, ...v] = line.split("=");
+        if (k && !k.startsWith("#")) process.env[k.trim()] = v.join("=").trim();
+      }
+      break;
+    } catch {
+      // file not found — try next
     }
-  } catch {
-    // .env.local not found — DATABASE_URL must be set in environment
   }
 }
 
