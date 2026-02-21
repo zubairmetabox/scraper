@@ -6,20 +6,13 @@ import { saveJob } from "@/lib/storage";
 export async function runScrapeJob(job: ScrapeJob): Promise<void> {
   job.status = "running";
   job.startedAt = new Date().toISOString();
-  saveJob(job);
+  await saveJob(job);
 
   try {
-    // Determine which sections to scrape
     const sections =
       job.category === "all"
         ? SITE_SECTIONS
         : SITE_SECTIONS.filter((s) => s.category === job.category);
-
-    // Also always crawl the homepage to discover additional links
-    const startUrls =
-      job.category === "all"
-        ? [BASE_URL, ...sections.map((s) => s.url)]
-        : sections.map((s) => s.url);
 
     const allDocs: ScrapedDocument[] = [];
 
@@ -34,7 +27,7 @@ export async function runScrapeJob(job: ScrapeJob): Promise<void> {
       allDocs.push(...docs);
     }
 
-    // If scraping all, also do a homepage crawl to catch unlisted pages
+    // Homepage crawl to catch any unlisted pages
     if (job.category === "all") {
       const discovered = await crawlSection({
         startUrls: [BASE_URL],
@@ -56,7 +49,7 @@ export async function runScrapeJob(job: ScrapeJob): Promise<void> {
     job.errors.push(err instanceof Error ? err.message : String(err));
   }
 
-  saveJob(job);
+  await saveJob(job);
 }
 
 export { SITE_SECTIONS };

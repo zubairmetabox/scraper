@@ -1,9 +1,8 @@
 import { createHttpClient } from "@/lib/http-client";
 import { parsePage, hashContent } from "@/lib/parser";
 import { isAllowed, BASE_URL } from "./site-map";
-import { upsertDocument } from "@/lib/storage";
+import { upsertDocument, saveJob } from "@/lib/storage";
 import { ScrapedDocument, ScraperCategory, ScrapeJob } from "@/types";
-import { saveJob } from "@/lib/storage";
 import slugify from "slugify";
 import { randomUUID } from "crypto";
 
@@ -13,7 +12,6 @@ interface CrawlOptions {
   maxDepth?: number;
   maxPages?: number;
   job: ScrapeJob;
-  onProgress?: (job: ScrapeJob) => void;
 }
 
 export async function crawlSection(opts: CrawlOptions): Promise<ScrapedDocument[]> {
@@ -55,8 +53,10 @@ export async function crawlSection(opts: CrawlOptions): Promise<ScrapedDocument[
         continue;
       }
 
-      const id = slugify(title || normUrl, { lower: true, strict: true }).slice(0, 80) +
-        "-" + randomUUID().slice(0, 8);
+      const id =
+        slugify(title || normUrl, { lower: true, strict: true }).slice(0, 80) +
+        "-" +
+        randomUUID().slice(0, 8);
 
       const doc: ScrapedDocument = {
         id,
@@ -70,11 +70,14 @@ export async function crawlSection(opts: CrawlOptions): Promise<ScrapedDocument[
       };
 
       collected.push(doc);
-      upsertDocument(doc);
+      // Persist each document immediately (async, awaited)
+      await upsertDocument(doc);
 
-      // Save job progress
-      job.documents = collected;
-      saveJob(job);
+      // Save job progress every 10 pages to reduce DB writes
+      if (job.scrapedPages % 10 === 0) {
+        job.documents = collected;
+        await saveJob(job);
+      }
 
       // Enqueue child links
       if (depth < maxDepth) {
@@ -89,9 +92,12 @@ export async function crawlSection(opts: CrawlOptions): Promise<ScrapedDocument[
       const msg = err instanceof Error ? err.message : String(err);
       job.errors.push(`Failed ${normUrl}: ${msg}`);
       job.failedPages++;
-      saveJob(job);
     }
   }
+
+  // Final job save
+  job.documents = collected;
+  await saveJob(job);
 
   return collected;
 }
